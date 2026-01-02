@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Auth } from 'aws-amplify';
+import { signIn as amplifySignIn, signOut as amplifySignOut, getCurrentUser, fetchAuthSession } from 'aws-amplify/auth';
 
 interface User {
   username: string;
@@ -27,11 +27,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function checkAuthState() {
     try {
-      const cognitoUser = await Auth.currentAuthenticatedUser();
+      const currentUser = await getCurrentUser();
+      const { tokens } = await fetchAuthSession();
+
       setUser({
-        username: cognitoUser.username,
-        email: cognitoUser.attributes.email,
-        userId: cognitoUser.attributes.sub,
+        username: currentUser.username,
+        email: tokens?.idToken?.payload.email as string || '',
+        userId: currentUser.userId,
       });
     } catch (error) {
       setUser(null);
@@ -42,12 +44,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function signIn(email: string, password: string) {
     try {
-      const cognitoUser = await Auth.signIn(email, password);
-      setUser({
-        username: cognitoUser.username,
-        email: cognitoUser.attributes.email,
-        userId: cognitoUser.attributes.sub,
+      const { isSignedIn, nextStep } = await amplifySignIn({
+        username: email,
+        password,
       });
+
+      if (isSignedIn) {
+        await checkAuthState();
+      } else if (nextStep.signInStep === 'CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED') {
+        throw new Error('NEW_PASSWORD_REQUIRED');
+      }
     } catch (error) {
       console.error('Sign in error:', error);
       throw error;
@@ -56,7 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function signOut() {
     try {
-      await Auth.signOut();
+      await amplifySignOut();
       setUser(null);
     } catch (error) {
       console.error('Sign out error:', error);
@@ -66,8 +72,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function getToken(): Promise<string> {
     try {
-      const session = await Auth.currentSession();
-      return session.getIdToken().getJwtToken();
+      const { tokens } = await fetchAuthSession();
+      return tokens?.idToken?.toString() || '';
     } catch (error) {
       console.error('Get token error:', error);
       throw error;

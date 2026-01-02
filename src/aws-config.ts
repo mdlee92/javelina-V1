@@ -1,16 +1,18 @@
-export const awsConfig = {
+import { ResourcesConfig } from 'aws-amplify';
+
+export const awsConfig: ResourcesConfig = {
   Auth: {
-    region: import.meta.env.VITE_AWS_REGION || 'us-east-1',
-    userPoolId: import.meta.env.VITE_USER_POOL_ID || '',
-    userPoolWebClientId: import.meta.env.VITE_USER_POOL_CLIENT_ID || '',
+    Cognito: {
+      userPoolId: import.meta.env.VITE_USER_POOL_ID || '',
+      userPoolClientId: import.meta.env.VITE_USER_POOL_CLIENT_ID || '',
+    },
   },
   API: {
-    endpoints: [
-      {
-        name: 'ERNotesAPI',
+    REST: {
+      ERNotesAPI: {
         endpoint: import.meta.env.VITE_API_ENDPOINT || '',
-        region: import.meta.env.VITE_AWS_REGION || 'us-east-1',
+        region: import.meta.env.VITE_AWS_REGION || 'us-east-2',
       },
-    ],
+    },
   },
 };

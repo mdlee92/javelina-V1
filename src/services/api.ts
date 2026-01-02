@@ -1,4 +1,5 @@
-import { API, Auth } from 'aws-amplify';
+import { get, post, put, del } from 'aws-amplify/api';
+import { fetchAuthSession } from 'aws-amplify/auth';
 import { Shift, Patient, Note } from '../types';
 
 const API_NAME = 'ERNotesAPI';
@@ -6,8 +7,8 @@ const API_NAME = 'ERNotesAPI';
 // Helper to get auth token
 async function getAuthHeaders() {
   try {
-    const session = await Auth.currentSession();
-    const token = session.getIdToken().getJwtToken();
+    const { tokens } = await fetchAuthSession();
+    const token = tokens?.idToken?.toString() || '';
     return {
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
@@ -21,37 +22,66 @@ async function getAuthHeaders() {
 export const shiftAPI = {
   async getAll(): Promise<Shift[]> {
     const headers = await getAuthHeaders();
-    const response = await API.get(API_NAME, '/shifts', { headers });
-    return response.shifts;
+    const restOperation = get({
+      apiName: API_NAME,
+      path: '/shifts',
+      options: { headers },
+    });
+    const { body } = await restOperation.response;
+    const response = await body.json();
+    return (response as any).shifts;
   },
 
   async create(name: string): Promise<Shift> {
     const headers = await getAuthHeaders();
-    const response = await API.post(API_NAME, '/shifts', {
-      headers,
-      body: { name },
+    const restOperation = post({
+      apiName: API_NAME,
+      path: '/shifts',
+      options: {
+        headers,
+        body: { name },
+      },
     });
-    return response.shift;
+    const { body } = await restOperation.response;
+    const response = await body.json();
+    return (response as any).shift;
   },
 
   async update(shiftId: string, name: string): Promise<Shift> {
     const headers = await getAuthHeaders();
-    const response = await API.put(API_NAME, `/shifts/${shiftId}`, {
-      headers,
-      body: { name },
+    const restOperation = put({
+      apiName: API_NAME,
+      path: `/shifts/${shiftId}`,
+      options: {
+        headers,
+        body: { name },
+      },
     });
-    return response.shift;
+    const { body } = await restOperation.response;
+    const response = await body.json();
+    return (response as any).shift;
   },
 
   async delete(shiftId: string): Promise<void> {
     const headers = await getAuthHeaders();
-    await API.del(API_NAME, `/shifts/${shiftId}`, { headers });
+    const restOperation = del({
+      apiName: API_NAME,
+      path: `/shifts/${shiftId}`,
+      options: { headers },
+    });
+    await restOperation.response;
   },
 
   async getById(shiftId: string): Promise<Shift> {
     const headers = await getAuthHeaders();
-    const response = await API.get(API_NAME, `/shifts/${shiftId}`, { headers });
-    return response.shift;
+    const restOperation = get({
+      apiName: API_NAME,
+      path: `/shifts/${shiftId}`,
+      options: { headers },
+    });
+    const { body } = await restOperation.response;
+    const response = await body.json();
+    return (response as any).shift;
   },
 };
 
@@ -59,37 +89,66 @@ export const shiftAPI = {
 export const patientAPI = {
   async getAll(shiftId: string): Promise<Patient[]> {
     const headers = await getAuthHeaders();
-    const response = await API.get(API_NAME, `/shifts/${shiftId}/patients`, { headers });
-    return response.patients;
+    const restOperation = get({
+      apiName: API_NAME,
+      path: `/shifts/${shiftId}/patients`,
+      options: { headers },
+    });
+    const { body } = await restOperation.response;
+    const response = await body.json();
+    return (response as any).patients;
   },
 
   async create(shiftId: string, name: string): Promise<Patient> {
     const headers = await getAuthHeaders();
-    const response = await API.post(API_NAME, `/shifts/${shiftId}/patients`, {
-      headers,
-      body: { name },
+    const restOperation = post({
+      apiName: API_NAME,
+      path: `/shifts/${shiftId}/patients`,
+      options: {
+        headers,
+        body: { name },
+      },
     });
-    return response.patient;
+    const { body } = await restOperation.response;
+    const response = await body.json();
+    return (response as any).patient;
   },
 
   async update(patientId: string, updates: { name?: string; archived?: boolean }): Promise<Patient> {
     const headers = await getAuthHeaders();
-    const response = await API.put(API_NAME, `/patients/${patientId}`, {
-      headers,
-      body: updates,
+    const restOperation = put({
+      apiName: API_NAME,
+      path: `/patients/${patientId}`,
+      options: {
+        headers,
+        body: updates,
+      },
     });
-    return response.patient;
+    const { body } = await restOperation.response;
+    const response = await body.json();
+    return (response as any).patient;
   },
 
   async delete(patientId: string): Promise<void> {
     const headers = await getAuthHeaders();
-    await API.del(API_NAME, `/patients/${patientId}`, { headers });
+    const restOperation = del({
+      apiName: API_NAME,
+      path: `/patients/${patientId}`,
+      options: { headers },
+    });
+    await restOperation.response;
   },
 
   async getById(patientId: string): Promise<Patient> {
     const headers = await getAuthHeaders();
-    const response = await API.get(API_NAME, `/patients/${patientId}`, { headers });
-    return response.patient;
+    const restOperation = get({
+      apiName: API_NAME,
+      path: `/patients/${patientId}`,
+      options: { headers },
+    });
+    const { body } = await restOperation.response;
+    const response = await body.json();
+    return (response as any).patient;
   },
 };
 
@@ -97,30 +156,53 @@ export const patientAPI = {
 export const noteAPI = {
   async getAll(patientId: string): Promise<Note[]> {
     const headers = await getAuthHeaders();
-    const response = await API.get(API_NAME, `/patients/${patientId}/notes`, { headers });
-    return response.notes;
+    const restOperation = get({
+      apiName: API_NAME,
+      path: `/patients/${patientId}/notes`,
+      options: { headers },
+    });
+    const { body } = await restOperation.response;
+    const response = await body.json();
+    return (response as any).notes;
   },
 
   async create(patientId: string, content: string): Promise<Note> {
     const headers = await getAuthHeaders();
-    const response = await API.post(API_NAME, `/patients/${patientId}/notes`, {
-      headers,
-      body: { content },
+    const restOperation = post({
+      apiName: API_NAME,
+      path: `/patients/${patientId}/notes`,
+      options: {
+        headers,
+        body: { content },
+      },
     });
-    return response.note;
+    const { body } = await restOperation.response;
+    const response = await body.json();
+    return (response as any).note;
   },
 
   async update(noteId: string, content: string): Promise<Note> {
     const headers = await getAuthHeaders();
-    const response = await API.put(API_NAME, `/notes/${noteId}`, {
-      headers,
-      body: { content },
+    const restOperation = put({
+      apiName: API_NAME,
+      path: `/notes/${noteId}`,
+      options: {
+        headers,
+        body: { content },
+      },
     });
-    return response.note;
+    const { body } = await restOperation.response;
+    const response = await body.json();
+    return (response as any).note;
   },
 
   async delete(noteId: string): Promise<void> {
     const headers = await getAuthHeaders();
-    await API.del(API_NAME, `/notes/${noteId}`, { headers });
+    const restOperation = del({
+      apiName: API_NAME,
+      path: `/notes/${noteId}`,
+      options: { headers },
+    });
+    await restOperation.response;
   },
 };
