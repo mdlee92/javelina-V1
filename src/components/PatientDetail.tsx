@@ -1,12 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
 import { FileText, ArrowRight, Download } from 'lucide-react';
-import { Patient } from '../types';
+import { Patient, Note } from '../types';
 import NoteItem from './NoteItem';
 import { exportPatientNotes } from '../utils/exportNotes';
 import { formatDateTime } from '../utils/dateFormat';
 
 interface PatientDetailProps {
   patient: Patient | null;
+  notes?: Note[];
   onAddNote: (content: string) => void;
   onUpdateNote: (noteId: string, content: string) => void;
   onDeleteNote: (noteId: string) => void;
@@ -14,6 +15,7 @@ interface PatientDetailProps {
 
 export default function PatientDetail({
   patient,
+  notes = [],
   onAddNote,
   onUpdateNote,
   onDeleteNote,
@@ -28,7 +30,7 @@ export default function PatientDetail({
       const container = notesContainerRef.current;
       container.scrollTop = container.scrollHeight;
     }
-  }, [patient?.notes.length]);
+  }, [notes.length]);
 
   // Handle textarea auto-expansion (1-5 lines, then scrollable)
   const handleTextareaInput = () => {
@@ -73,11 +75,13 @@ export default function PatientDetail({
 
   const handleExportNotes = () => {
     if (!patient) return;
-    if (patient.notes.length === 0) {
+    if (notes.length === 0) {
       alert('No notes to export. Add some notes first!');
       return;
     }
-    exportPatientNotes(patient);
+    // Create a temporary patient object with notes for export
+    const patientWithNotes = { ...patient, notes };
+    exportPatientNotes(patientWithNotes);
   };
 
   if (!patient) {
@@ -92,7 +96,7 @@ export default function PatientDetail({
   }
 
   // Sort notes by creation time, oldest first
-  const sortedNotes = [...patient.notes].sort(
+  const sortedNotes = [...notes].sort(
     (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
   );
 
@@ -120,7 +124,7 @@ export default function PatientDetail({
           </div>
           <div className="flex items-center gap-4 mt-2 text-caption text-neutral-500">
             {patient.createdAt && <span>Created {formatDateTime(patient.createdAt)}</span>}
-            <span>{patient.notes.length} {patient.notes.length === 1 ? 'note' : 'notes'}</span>
+            <span>{notes.length} {notes.length === 1 ? 'note' : 'notes'}</span>
           </div>
         </div>
 

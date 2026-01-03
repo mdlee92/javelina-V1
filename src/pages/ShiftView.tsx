@@ -1,19 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { AppData } from '../types';
-import {
-  loadData,
-  updateShiftName,
-  deleteShift,
-  switchShift,
-  addPatient,
-  updatePatientName,
-  deletePatient,
-  togglePatientArchive,
-  addNote,
-  updateNote,
-  deleteNote,
-} from '../utils/storage';
+import { useShifts } from '../hooks/useShifts';
+import { usePatients } from '../hooks/usePatients';
+import { useNotes } from '../hooks/useNotes';
 import Header from '../components/Header';
 import ShiftHeader from '../components/ShiftHeader';
 import PatientList from '../components/PatientList';
@@ -30,8 +19,10 @@ interface ConfirmState {
 export default function ShiftView() {
   const { shiftId } = useParams<{ shiftId: string }>();
   const navigate = useNavigate();
-  const [data, setData] = useState<AppData>(() => loadData());
+  const { shifts, updateShiftName, deleteShift } = useShifts();
+  const { patients, createPatient, updatePatientName, deletePatient, togglePatientArchive } = usePatients(shiftId || null);
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
+  const { notes, createNote, updateNote, deleteNote } = useNotes(selectedPatientId);
   const [confirmDialog, setConfirmDialog] = useState<ConfirmState>({
     isOpen: false,
     title: '',
@@ -39,52 +30,39 @@ export default function ShiftView() {
     onConfirm: () => {},
   });
 
-  // Validate shift exists and sync with localStorage
+  // Validate shift exists
   useEffect(() => {
     if (!shiftId) {
       navigate('/', { replace: true });
       return;
     }
 
-    const currentData = loadData();
-    const shift = currentData.shifts.find((s) => s.id === shiftId);
-
-    if (!shift) {
+    const shift = shifts.find((s) => s.id === shiftId);
+    if (shifts.length > 0 && !shift) {
       navigate('/', { replace: true });
       return;
     }
+  }, [shiftId, shifts, navigate]);
 
-    // Sync currentShiftId with URL
-    if (currentData.currentShiftId !== shiftId) {
-      const updatedData = switchShift(currentData, shiftId);
-      setData(updatedData);
-    } else {
-      setData(currentData);
-    }
-  }, [shiftId, navigate]);
-
-  const currentShift = data.shifts.find((s) => s.id === data.currentShiftId) || null;
-  const currentPatients = currentShift?.patients || [];
-  const selectedPatient = currentPatients.find((p) => p.id === selectedPatientId) || null;
+  const currentShift = shifts.find((s) => s.id === shiftId) || null;
+  const selectedPatient = patients.find((p) => p.id === selectedPatientId) || null;
 
   // Auto-select first patient when shift changes, preferring active patients
   useEffect(() => {
-    if (currentShift && currentShift.patients.length > 0 && !selectedPatientId) {
+    if (patients.length > 0 && !selectedPatientId) {
       // Prefer active patients when auto-selecting
-      const activePatient = currentShift.patients.find(p => !p.archived);
-      setSelectedPatientId(activePatient?.id || currentShift.patients[0].id);
-    } else if (!currentShift) {
-      setSelectedPatientId(null);
-    } else if (selectedPatientId && !currentPatients.find((p) => p.id === selectedPatientId)) {
+      const activePatient = patients.find(p => !p.archived);
+      setSelectedPatientId(activePatient?.id || patients[0].id);
+    } else if (selectedPatientId && !patients.find((p) => p.id === selectedPatientId)) {
       // If selected patient was deleted, prefer active patients
-      if (currentPatients.length > 0) {
-        const activePatient = currentPatients.find(p => !p.archived);
-        setSelectedPatientId(activePatient?.id || currentPatients[0].id);
+      if (patients.length > 0) {
+        const activePatient = patients.find(p => !p.archived);
+        setSelectedPatientId(activePatient?.id || patients[0].id);
       } else {
         setSelectedPatientId(null);
       }
     }
-  }, [currentShift, selectedPatientId, currentPatients]);
+  }, [patients, selectedPatientId]);
 
   const showConfirm = (title: string, message: string, onConfirm: () => void) => {
     setConfirmDialog({
@@ -109,10 +87,13 @@ export default function ShiftView() {
     closeConfirm();
   };
 
-  const handleUpdateShiftName = (name: string) => {
+  const handleUpdateShiftName = async (name: string) => {
     if (!currentShift) return;
-    const newData = updateShiftName(data, currentShift.id, name);
-    setData(newData);
+    try {
+      await updateShiftName(currentShift.id, name);
+    } catch (err) {
+      console.error('Failed to update shift name:', err);
+    }
   };
 
   const handleDeleteShift = () => {
@@ -120,76 +101,93 @@ export default function ShiftView() {
     showConfirm(
       'Delete Shift',
       `Are you sure you want to delete "${currentShift.name}" and all its patients? This cannot be undone.`,
-      () => {
-        const newData = deleteShift(data, currentShift.id);
-        setData(newData);
-        setSelectedPatientId(null);
-        navigate('/');
+      async () => {
+        try {
+          await deleteShift(currentShift.id);
+          setSelectedPatientId(null);
+          navigate('/');
+        } catch (err) {
+          console.error('Failed to delete shift:', err);
+        }
       }
     );
   };
 
   // Patient operations
-  const handleAddPatient = (name: string) => {
+  const handleAddPatient = async (name: string) => {
     if (!currentShift) return;
-    const newData = addPatient(data, currentShift.id, name);
-    setData(newData);
-    // Auto-select the new patient
-    const updatedShift = newData.shifts.find((s) => s.id === currentShift.id);
-    if (updatedShift) {
-      const newPatient = updatedShift.patients[updatedShift.patients.length - 1];
+    try {
+      console.log('Creating patient with name:', name);
+      const newPatient = await createPatient(name);
+      console.log('Patient created successfully:', newPatient);
       setSelectedPatientId(newPatient.id);
+    } catch (err: any) {
+      console.error('Failed to add patient:', err);
+      alert(`Error creating patient: ${err.message || 'Unknown error'}\n\nPlease check the browser console for details.`);
     }
   };
 
-  const handleUpdatePatientName = (patientId: string, name: string) => {
-    if (!currentShift) return;
-    const newData = updatePatientName(data, currentShift.id, patientId, name);
-    setData(newData);
+  const handleUpdatePatientName = async (patientId: string, name: string) => {
+    try {
+      await updatePatientName(patientId, name);
+    } catch (err) {
+      console.error('Failed to update patient name:', err);
+    }
   };
 
   const handleDeletePatient = (patientId: string) => {
-    if (!currentShift) return;
-    const patient = currentPatients.find((p) => p.id === patientId);
+    const patient = patients.find((p) => p.id === patientId);
     if (!patient) return;
 
     showConfirm(
       'Delete Patient',
       `Are you sure you want to delete "${patient.name}" and all their notes? This cannot be undone.`,
-      () => {
-        const newData = deletePatient(data, currentShift.id, patientId);
-        setData(newData);
+      async () => {
+        try {
+          await deletePatient(patientId);
+        } catch (err) {
+          console.error('Failed to delete patient:', err);
+        }
       }
     );
   };
 
-  const handleToggleArchive = (patientId: string) => {
-    if (!currentShift) return;
-    const newData = togglePatientArchive(data, currentShift.id, patientId);
-    setData(newData);
+  const handleToggleArchive = async (patientId: string) => {
+    try {
+      await togglePatientArchive(patientId);
+    } catch (err) {
+      console.error('Failed to toggle patient archive:', err);
+    }
   };
 
   // Note operations
-  const handleAddNote = (content: string) => {
-    if (!currentShift || !selectedPatientId) return;
-    const newData = addNote(data, currentShift.id, selectedPatientId, content);
-    setData(newData);
+  const handleAddNote = async (content: string) => {
+    if (!selectedPatientId) return;
+    try {
+      await createNote(content);
+    } catch (err) {
+      console.error('Failed to add note:', err);
+    }
   };
 
-  const handleUpdateNote = (noteId: string, content: string) => {
-    if (!currentShift || !selectedPatientId) return;
-    const newData = updateNote(data, currentShift.id, selectedPatientId, noteId, content);
-    setData(newData);
+  const handleUpdateNote = async (noteId: string, content: string) => {
+    try {
+      await updateNote(noteId, content);
+    } catch (err) {
+      console.error('Failed to update note:', err);
+    }
   };
 
   const handleDeleteNote = (noteId: string) => {
-    if (!currentShift || !selectedPatientId) return;
     showConfirm(
       'Delete Note',
       'Are you sure you want to delete this note? This cannot be undone.',
-      () => {
-        const newData = deleteNote(data, currentShift.id, selectedPatientId, noteId);
-        setData(newData);
+      async () => {
+        try {
+          await deleteNote(noteId);
+        } catch (err) {
+          console.error('Failed to delete note:', err);
+        }
       }
     );
   };
@@ -207,7 +205,7 @@ export default function ShiftView() {
       {currentShift ? (
         <div className="flex-1 flex overflow-hidden pb-6">
           <PatientList
-            patients={currentPatients}
+            patients={patients}
             selectedPatientId={selectedPatientId}
             onSelectPatient={setSelectedPatientId}
             onUpdatePatientName={handleUpdatePatientName}
@@ -216,6 +214,7 @@ export default function ShiftView() {
           />
           <PatientDetail
             patient={selectedPatient}
+            notes={notes}
             onAddNote={handleAddNote}
             onUpdateNote={handleUpdateNote}
             onDeleteNote={handleDeleteNote}

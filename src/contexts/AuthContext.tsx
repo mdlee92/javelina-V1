@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { signIn as amplifySignIn, signOut as amplifySignOut, getCurrentUser, fetchAuthSession } from 'aws-amplify/auth';
+import { signIn as amplifySignIn, confirmSignIn, signOut as amplifySignOut, getCurrentUser, fetchAuthSession } from 'aws-amplify/auth';
 
 interface User {
   username: string;
@@ -11,6 +11,7 @@ interface AuthContextType {
   user: User | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
+  confirmNewPassword: (newPassword: string) => Promise<void>;
   signOut: () => Promise<void>;
   getToken: () => Promise<string>;
 }
@@ -52,10 +53,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (isSignedIn) {
         await checkAuthState();
       } else if (nextStep.signInStep === 'CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED') {
-        throw new Error('NEW_PASSWORD_REQUIRED');
+        // Throw special error to trigger password change UI
+        const error = new Error('New password required') as any;
+        error.code = 'NewPasswordRequired';
+        throw error;
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Sign in error:', error);
+      // Re-throw with better error info
+      if (error.name === 'NotAuthorizedException') {
+        const err = new Error('Incorrect email or password') as any;
+        err.code = 'NotAuthorizedException';
+        throw err;
+      }
+      if (error.name === 'UserNotFoundException') {
+        const err = new Error('No account found with this email') as any;
+        err.code = 'UserNotFoundException';
+        throw err;
+      }
+      throw error;
+    }
+  }
+
+  async function confirmNewPassword(newPassword: string) {
+    try {
+      const { isSignedIn } = await confirmSignIn({
+        challengeResponse: newPassword,
+      });
+
+      if (isSignedIn) {
+        await checkAuthState();
+      }
+    } catch (error: any) {
+      console.error('Confirm new password error:', error);
       throw error;
     }
   }
@@ -84,6 +114,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     user,
     loading,
     signIn,
+    confirmNewPassword,
     signOut,
     getToken,
   };

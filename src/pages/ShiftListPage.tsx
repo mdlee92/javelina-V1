@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Trash2, Pencil, Check, X, Calendar, ArrowUp, ArrowDown } from 'lucide-react';
-import { AppData } from '../types';
-import { loadData, createShift, updateShiftName, deleteShift } from '../utils/storage';
+import { useShifts } from '../hooks/useShifts';
 import Header from '../components/Header';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { formatDateTime } from '../utils/dateFormat';
@@ -19,7 +18,7 @@ type SortDirection = 'asc' | 'desc';
 
 export default function ShiftListPage() {
   const navigate = useNavigate();
-  const [data, setData] = useState<AppData>(() => loadData());
+  const { shifts, loading, error, createShift, updateShiftName, deleteShift } = useShifts();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [isAddingShift, setIsAddingShift] = useState(false);
@@ -62,16 +61,17 @@ export default function ShiftListPage() {
     }
   };
 
-  const handleCreateShift = () => {
+  const handleCreateShift = async () => {
     if (newShiftName.trim()) {
-      const newData = createShift(data, newShiftName.trim());
-      setData(newData);
-      setIsAddingShift(false);
-      setNewShiftName('');
-
-      // Auto-navigate to the newly created shift
-      const newShift = newData.shifts[newData.shifts.length - 1];
-      navigate(`/shift/${newShift.id}`);
+      try {
+        const newShift = await createShift(newShiftName.trim());
+        setIsAddingShift(false);
+        setNewShiftName('');
+        // Auto-navigate to the newly created shift
+        navigate(`/shift/${newShift.id}`);
+      } catch (err) {
+        console.error('Failed to create shift:', err);
+      }
     }
   };
 
@@ -81,13 +81,16 @@ export default function ShiftListPage() {
     setEditName(currentName);
   };
 
-  const handleSaveEdit = (shiftId: string, e?: React.MouseEvent) => {
+  const handleSaveEdit = async (shiftId: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     if (editName.trim()) {
-      const newData = updateShiftName(data, shiftId, editName.trim());
-      setData(newData);
-      setEditingId(null);
-      setEditName('');
+      try {
+        await updateShiftName(shiftId, editName.trim());
+        setEditingId(null);
+        setEditName('');
+      } catch (err) {
+        console.error('Failed to update shift name:', err);
+      }
     }
   };
 
@@ -102,9 +105,12 @@ export default function ShiftListPage() {
     showConfirm(
       'Delete Shift',
       `Are you sure you want to delete "${shiftName}" and all its patients? This cannot be undone.`,
-      () => {
-        const newData = deleteShift(data, shiftId);
-        setData(newData);
+      async () => {
+        try {
+          await deleteShift(shiftId);
+        } catch (err) {
+          console.error('Failed to delete shift:', err);
+        }
       }
     );
   };
@@ -126,44 +132,6 @@ export default function ShiftListPage() {
     }
   };
 
-  const sortShifts = (shifts: typeof data.shifts, column: ShiftSortColumn, direction: SortDirection) => {
-    const sorted = [...shifts];
-
-    sorted.sort((a, b) => {
-      let aValue: string | number;
-      let bValue: string | number;
-
-      switch (column) {
-        case 'name':
-          aValue = a.name.toLowerCase();
-          bValue = b.name.toLowerCase();
-          break;
-        case 'createdAt':
-          aValue = new Date(a.createdAt).getTime();
-          bValue = new Date(b.createdAt).getTime();
-          break;
-        case 'totalPatients':
-          aValue = a.patients.length;
-          bValue = b.patients.length;
-          break;
-        case 'activePatients':
-          aValue = a.patients.filter(p => !p.archived).length;
-          bValue = b.patients.filter(p => !p.archived).length;
-          break;
-        case 'archivedPatients':
-          aValue = a.patients.filter(p => p.archived).length;
-          bValue = b.patients.filter(p => p.archived).length;
-          break;
-      }
-
-      if (aValue < bValue) return direction === 'asc' ? -1 : 1;
-      if (aValue > bValue) return direction === 'asc' ? 1 : -1;
-      return 0;
-    });
-
-    return sorted;
-  };
-
   const handleSort = (column: ShiftSortColumn) => {
     if (sortColumn === column) {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
@@ -173,7 +141,38 @@ export default function ShiftListPage() {
     }
   };
 
-  const sortedShifts = sortShifts(data.shifts, sortColumn, sortDirection);
+  const sortedShifts = [...shifts].sort((a, b) => {
+    let aValue: string | number;
+    let bValue: string | number;
+
+    switch (sortColumn) {
+      case 'name':
+        aValue = a.name.toLowerCase();
+        bValue = b.name.toLowerCase();
+        break;
+      case 'createdAt':
+        aValue = new Date(a.createdAt).getTime();
+        bValue = new Date(b.createdAt).getTime();
+        break;
+      case 'totalPatients':
+        aValue = a.patients.length;
+        bValue = b.patients.length;
+        break;
+      case 'activePatients':
+        aValue = a.patients.filter(p => !p.archived).length;
+        bValue = b.patients.filter(p => !p.archived).length;
+        break;
+      case 'archivedPatients':
+        aValue = a.patients.filter(p => p.archived).length;
+        bValue = b.patients.filter(p => p.archived).length;
+        break;
+    }
+
+    const direction = sortDirection;
+    if (aValue < bValue) return direction === 'asc' ? -1 : 1;
+    if (aValue > bValue) return direction === 'asc' ? 1 : -1;
+    return 0;
+  });
 
   return (
     <div className="h-screen flex flex-col bg-neutral-50">
